@@ -82,7 +82,7 @@ def mock_yfinance_response():
     }
 
 
-class TestFundamentalStockAnalyzer:
+class TestAsyncFundamentalStockAnalyzer:
     """Test suite for the async FundamentalStockAnalyzer class."""
 
     @pytest.mark.asyncio

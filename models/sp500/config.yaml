@@ -1,0 +1,95 @@
+# S&P 500 Fundamentals Configuration
+cache:
+  days: 30
+  file: "sp500_tickers.json"
+
+data_source:
+  url: "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+  user_agent: "Mozilla/5.0"
+
+# Financial metrics to fetch
+fields:
+  basic_info:
+    - shortName
+    - sector
+    - industry
+    - marketCap
+    - currentPrice
+    - beta
+
+  valuation_metrics:
+    - enterpriseValue
+    - priceToBook
+    - priceToSalesTrailing12Months
+    - trailingPE
+    - forwardPE
+    - pegRatio
+    - enterpriseToEbitda
+
+  profitability_metrics:
+    - totalRevenue
+    - ebitda
+    - profitMargins
+    - ebitdaMargins
+    - operatingMargins
+    - grossMargins
+    - returnOnEquity
+    - returnOnAssets
+
+  cash_flow_metrics:
+    - operatingCashflow
+    - freeCashflow
+    - totalCash
+    - totalCashPerShare
+
+  growth_metrics:
+    - earningsGrowth
+    - revenueGrowth
+
+  financial_health:
+    - quickRatio
+    - debtToEquity
+
+  dividend_info:
+    - dividendRate
+    - fiveYearAvgDividendYield
+    - trailingAnnualDividendRate
+
+  analyst_data:
+    - targetHighPrice
+    - targetLowPrice
+    - targetMeanPrice
+    - recommendationKey
+
+  earnings_data:
+    - trailingEps
+    - forwardEps
+
+# Field sets for different analysis types
+field_sets:
+  quick_overview:
+    - shortName
+    - sector
+    - marketCap
+    - currentPrice
+    - trailingPE
+    - dividendRate
+
+  value_analysis:
+    - priceToBook
+    - trailingPE
+    - forwardPE
+    - pegRatio
+    - priceToSalesTrailing12Months
+    - enterpriseToEbitda
+
+  fundamental_analysis:
+    - profitMargins
+    - returnOnEquity
+    - returnOnAssets
+    - debtToEquity
+    - quickRatio
+    - earningsGrowth
+    - revenueGrowth
+
+  complete: all  # Use all fields
