@@ -7,10 +7,10 @@ from io import StringIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import aiofiles
+import aiofiles  # type: ignore
 import aiohttp
 import pandas as pd
-import yfinance as yf
+import yfinance as yf  # type: ignore
 
 from .config_loader import FundamentalsConfig
 
@@ -164,6 +164,85 @@ class FundamentalStockAnalyzer:
         field_groups = list(self.config._config.get("fields", {}).keys())
         return field_sets + field_groups + ["all"]
 
+    async def _calculate_percentage_changes(
+        self, ticker: str
+    ) -> Dict[str, Optional[float]]:
+        """Calculate percentage changes for different time periods.
+
+        Parameters
+        ----------
+        ticker : str
+            Stock ticker symbol.
+
+        Returns
+        -------
+        Dict[str, Optional[float]]
+            Dictionary containing percentage changes for different periods.
+        """
+        try:
+            # Run yfinance in a thread pool to avoid blocking the event loop
+            loop = asyncio.get_event_loop()
+            stock = yf.Ticker(ticker)
+            hist = await loop.run_in_executor(
+                None, lambda: stock.history(period="1y", interval="1wk")
+            )
+
+            # Handle timezone localization if needed
+            if isinstance(hist.index, pd.DatetimeIndex) and hist.index.tz is not None:
+                hist.index = hist.index.tz_localize(None)
+
+            if hist.empty or len(hist) < 2:
+                logger.warning(f"Insufficient historical data for {ticker}")
+                return {
+                    "annualChangePercent": None,
+                    "sixMonthChangePercent": None,
+                    "threeMonthChangePercent": None,
+                    "oneMonthChangePercent": None,
+                    "oneWeekChangePercent": None,
+                }
+
+            current_price = hist["Close"].iloc[-1]
+
+            # Calculate percentage changes with proper weekly intervals
+            # 1 year ≈ 52 weeks, 6 months ≈ 26 weeks, 3 months ≈ 13 weeks, 1 month ≈ 4 weeks
+            changes = {}
+            periods = {
+                "annualChangePercent": min(52, len(hist) - 1),
+                "sixMonthChangePercent": min(26, len(hist) - 1),
+                "threeMonthChangePercent": min(13, len(hist) - 1),
+                "oneMonthChangePercent": min(4, len(hist) - 1),
+                "oneWeekChangePercent": min(1, len(hist) - 1),
+            }
+
+            for field_name, weeks_back in periods.items():
+                try:
+                    if weeks_back > 0 and len(hist) > weeks_back:
+                        past_price = hist["Close"].iloc[-(weeks_back + 1)]
+                        if past_price and past_price != 0:
+                            change_percent = (
+                                (current_price - past_price) / past_price
+                            ) * 100
+                            changes[field_name] = round(change_percent, 2)
+                        else:
+                            changes[field_name] = None
+                    else:
+                        changes[field_name] = None
+                except (IndexError, ZeroDivisionError):
+                    changes[field_name] = None
+
+            logger.debug(f"Calculated percentage changes for {ticker}")
+            return changes
+
+        except Exception as e:
+            logger.error(f"Error calculating percentage changes for {ticker}: {e}")
+            return {
+                "annualChangePercent": None,
+                "sixMonthChangePercent": None,
+                "threeMonthChangePercent": None,
+                "oneMonthChangePercent": None,
+                "oneWeekChangePercent": None,
+            }
+
     async def get_fundamentals(
         self, ticker: str, field_set: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -190,12 +269,32 @@ class FundamentalStockAnalyzer:
             stock = yf.Ticker(ticker)
             info = await loop.run_in_executor(None, lambda: stock.info)
 
-            fundamental_data = {
+            # Get basic fundamental data
+            fundamental_data = {field: info.get(field, None) for field in fields}
+
+            # Check if any percentage change fields are requested
+            percentage_fields = {
+                "annualChangePercent",
+                "sixMonthChangePercent",
+                "threeMonthChangePercent",
+                "oneMonthChangePercent",
+                "oneWeekChangePercent",
+            }
+
+            if any(field in percentage_fields for field in fields):
+                # Calculate percentage changes
+                percentage_changes = await self._calculate_percentage_changes(ticker)
+                # Add requested percentage change fields
+                for field in fields:
+                    if field in percentage_fields:
+                        fundamental_data[field] = percentage_changes.get(field)
+
+            result = {
                 "ticker": ticker,
-                "data": {field: info.get(field, None) for field in fields},
+                "data": fundamental_data,
             }
             logger.debug(f"Successfully fetched data for {ticker}")
-            return fundamental_data
+            return result
         except Exception as e:
             logger.error(f"Error fetching data for {ticker}: {e}")
             return {
@@ -250,7 +349,7 @@ class FundamentalStockAnalyzer:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Handle any exceptions that occurred
-        processed_results = []
+        processed_results: list[dict[str, Any]] = []
         for i, result in enumerate(results):
             if isinstance(result, Exception):
                 logger.error(f"Error processing ticker {tickers[i]}: {result}")
@@ -262,6 +361,8 @@ class FundamentalStockAnalyzer:
                     }
                 )
             else:
+                # result is guaranteed to be Dict[str, Any] here due to isinstance check
+                assert isinstance(result, dict)  # Type narrowing for mypy
                 processed_results.append(result)
 
         logger.info(f"Completed processing {len(processed_results)} tickers")

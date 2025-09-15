@@ -457,3 +457,467 @@ class TestAsyncFundamentalStockAnalyzer:
                 # Second result should have error
                 assert results[1]["ticker"] == "INVALID"
                 assert "error" in results[1]
+
+    @pytest.fixture
+    def mock_historical_data(self):
+        """Mock historical price data for percentage change calculations."""
+        # Create mock historical data with realistic price progression
+        dates = pd.date_range(start="2023-09-15", end="2024-09-15", freq="W")
+        prices = [
+            100.0,
+            102.0,
+            98.0,
+            105.0,
+            110.0,
+            108.0,
+            115.0,
+            120.0,
+            118.0,
+            125.0,
+            130.0,
+            128.0,
+            135.0,
+            140.0,
+            138.0,
+            145.0,
+            150.0,
+            148.0,
+            155.0,
+            160.0,
+            158.0,
+            165.0,
+            170.0,
+            168.0,
+            175.0,
+            180.0,
+            178.0,
+            185.0,
+            190.0,
+            188.0,
+            195.0,
+            200.0,
+            198.0,
+            205.0,
+            210.0,
+            208.0,
+            215.0,
+            220.0,
+            218.0,
+            225.0,
+            230.0,
+            228.0,
+            235.0,
+            240.0,
+            238.0,
+            245.0,
+            250.0,
+            248.0,
+            255.0,
+            260.0,
+            258.0,
+            265.0,
+            270.0,
+        ]  # 53 weeks of data
+
+        hist_data = pd.DataFrame(
+            {
+                "Close": prices[: len(dates)],
+                "Open": [p * 0.99 for p in prices[: len(dates)]],
+                "High": [p * 1.02 for p in prices[: len(dates)]],
+                "Low": [p * 0.98 for p in prices[: len(dates)]],
+                "Volume": [1000000] * len(dates),
+            },
+            index=dates,
+        )
+
+        return hist_data
+
+    @pytest.mark.asyncio
+    async def test_percentage_changes_field_detection(
+        self, temp_cache_file, sample_tickers, mock_yfinance_response
+    ):
+        """Test that percentage change fields are properly detected and available."""
+        with open(temp_cache_file, "w") as f:
+            json.dump(sample_tickers, f)
+
+        with patch("aiofiles.open", create=True) as mock_aiofiles:
+            mock_file = AsyncMock()
+            mock_file.read.return_value = json.dumps(sample_tickers)
+            mock_aiofiles.return_value.__aenter__.return_value = mock_file
+            mock_aiofiles.return_value.__aexit__.return_value = None
+
+            analyzer = await FundamentalStockAnalyzer.create(cache_file=temp_cache_file)
+
+            # Test that new field sets are available
+            field_sets = analyzer.get_available_field_sets()
+            assert "percentage_changes" in field_sets
+            assert "price_performance" in field_sets
+
+            # Test that percentage change fields are in the percentage_changes group
+            percentage_fields = analyzer.get_fields("percentage_changes")
+            expected_fields = [
+                "annualChangePercent",
+                "sixMonthChangePercent",
+                "threeMonthChangePercent",
+                "oneMonthChangePercent",
+                "oneWeekChangePercent",
+            ]
+            assert all(field in percentage_fields for field in expected_fields)
+
+            # Test that price_performance includes current price + percentage changes
+            price_performance_fields = analyzer.get_fields("price_performance")
+            assert "currentPrice" in price_performance_fields
+            assert all(field in price_performance_fields for field in expected_fields)
+
+    @pytest.mark.asyncio
+    async def test_calculate_percentage_changes_method(
+        self, temp_cache_file, sample_tickers, mock_historical_data
+    ):
+        """Test the _calculate_percentage_changes method directly."""
+        with open(temp_cache_file, "w") as f:
+            json.dump(sample_tickers, f)
+
+        with patch("aiofiles.open", create=True) as mock_aiofiles:
+            mock_file = AsyncMock()
+            mock_file.read.return_value = json.dumps(sample_tickers)
+            mock_aiofiles.return_value.__aenter__.return_value = mock_file
+            mock_aiofiles.return_value.__aexit__.return_value = None
+
+            with patch("yfinance.Ticker") as mock_ticker:
+                mock_stock = Mock()
+                mock_stock.history.return_value = mock_historical_data
+                mock_ticker.return_value = mock_stock
+
+                analyzer = await FundamentalStockAnalyzer.create(
+                    cache_file=temp_cache_file
+                )
+
+                # Test percentage change calculation
+                changes = await analyzer._calculate_percentage_changes("AAPL")
+
+                # Verify all expected fields are present
+                expected_fields = [
+                    "annualChangePercent",
+                    "sixMonthChangePercent",
+                    "threeMonthChangePercent",
+                    "oneMonthChangePercent",
+                    "oneWeekChangePercent",
+                ]
+                assert all(field in changes for field in expected_fields)
+
+                # Verify that calculations return reasonable values
+                for field, value in changes.items():
+                    if value is not None:
+                        assert isinstance(value, (int, float))
+                        # Percentage changes should typically be reasonable (-100% to +1000%)
+                        assert -100 <= value <= 1000
+
+    @pytest.mark.asyncio
+    async def test_calculate_percentage_changes_with_insufficient_data(
+        self, temp_cache_file, sample_tickers
+    ):
+        """Test percentage change calculation with insufficient historical data."""
+        with open(temp_cache_file, "w") as f:
+            json.dump(sample_tickers, f)
+
+        with patch("aiofiles.open", create=True) as mock_aiofiles:
+            mock_file = AsyncMock()
+            mock_file.read.return_value = json.dumps(sample_tickers)
+            mock_aiofiles.return_value.__aenter__.return_value = mock_file
+            mock_aiofiles.return_value.__aexit__.return_value = None
+
+            with patch("yfinance.Ticker") as mock_ticker:
+                # Mock empty historical data
+                mock_stock = Mock()
+                mock_stock.history.return_value = pd.DataFrame()
+                mock_ticker.return_value = mock_stock
+
+                analyzer = await FundamentalStockAnalyzer.create(
+                    cache_file=temp_cache_file
+                )
+
+                changes = await analyzer._calculate_percentage_changes("AAPL")
+
+                # All fields should be None when insufficient data
+                expected_fields = [
+                    "annualChangePercent",
+                    "sixMonthChangePercent",
+                    "threeMonthChangePercent",
+                    "oneMonthChangePercent",
+                    "oneWeekChangePercent",
+                ]
+                assert all(changes[field] is None for field in expected_fields)
+
+    @pytest.mark.asyncio
+    async def test_calculate_percentage_changes_with_error(
+        self, temp_cache_file, sample_tickers
+    ):
+        """Test percentage change calculation when yfinance throws an error."""
+        with open(temp_cache_file, "w") as f:
+            json.dump(sample_tickers, f)
+
+        with patch("aiofiles.open", create=True) as mock_aiofiles:
+            mock_file = AsyncMock()
+            mock_file.read.return_value = json.dumps(sample_tickers)
+            mock_aiofiles.return_value.__aenter__.return_value = mock_file
+            mock_aiofiles.return_value.__aexit__.return_value = None
+
+            with patch("yfinance.Ticker") as mock_ticker:
+                # Mock yfinance to raise an exception
+                mock_ticker.side_effect = Exception("Network error")
+
+                analyzer = await FundamentalStockAnalyzer.create(
+                    cache_file=temp_cache_file
+                )
+
+                changes = await analyzer._calculate_percentage_changes("AAPL")
+
+                # All fields should be None when error occurs
+                expected_fields = [
+                    "annualChangePercent",
+                    "sixMonthChangePercent",
+                    "threeMonthChangePercent",
+                    "oneMonthChangePercent",
+                    "oneWeekChangePercent",
+                ]
+                assert all(changes[field] is None for field in expected_fields)
+
+    @pytest.mark.asyncio
+    async def test_get_fundamentals_with_percentage_changes(
+        self,
+        temp_cache_file,
+        sample_tickers,
+        mock_yfinance_response,
+        mock_historical_data,
+    ):
+        """Test get_fundamentals method with percentage change fields."""
+        with open(temp_cache_file, "w") as f:
+            json.dump(sample_tickers, f)
+
+        with patch("aiofiles.open", create=True) as mock_aiofiles:
+            mock_file = AsyncMock()
+            mock_file.read.return_value = json.dumps(sample_tickers)
+            mock_aiofiles.return_value.__aenter__.return_value = mock_file
+            mock_aiofiles.return_value.__aexit__.return_value = None
+
+            with patch("yfinance.Ticker") as mock_ticker:
+                mock_stock = Mock()
+                mock_stock.info = mock_yfinance_response
+                mock_stock.history.return_value = mock_historical_data
+                mock_ticker.return_value = mock_stock
+
+                analyzer = await FundamentalStockAnalyzer.create(
+                    cache_file=temp_cache_file
+                )
+
+                # Test with percentage_changes field set
+                result = await analyzer.get_fundamentals(
+                    "AAPL", field_set="percentage_changes"
+                )
+
+                assert result["ticker"] == "AAPL"
+                assert "data" in result
+                assert "error" not in result
+
+                # Verify percentage change fields are present
+                data = result["data"]
+                expected_fields = [
+                    "annualChangePercent",
+                    "sixMonthChangePercent",
+                    "threeMonthChangePercent",
+                    "oneMonthChangePercent",
+                    "oneWeekChangePercent",
+                ]
+                assert all(field in data for field in expected_fields)
+
+    @pytest.mark.asyncio
+    async def test_get_fundamentals_with_price_performance(
+        self,
+        temp_cache_file,
+        sample_tickers,
+        mock_yfinance_response,
+        mock_historical_data,
+    ):
+        """Test get_fundamentals method with price_performance field set."""
+        with open(temp_cache_file, "w") as f:
+            json.dump(sample_tickers, f)
+
+        with patch("aiofiles.open", create=True) as mock_aiofiles:
+            mock_file = AsyncMock()
+            mock_file.read.return_value = json.dumps(sample_tickers)
+            mock_aiofiles.return_value.__aenter__.return_value = mock_file
+            mock_aiofiles.return_value.__aexit__.return_value = None
+
+            with patch("yfinance.Ticker") as mock_ticker:
+                mock_stock = Mock()
+                mock_stock.info = mock_yfinance_response
+                mock_stock.history.return_value = mock_historical_data
+                mock_ticker.return_value = mock_stock
+
+                analyzer = await FundamentalStockAnalyzer.create(
+                    cache_file=temp_cache_file
+                )
+
+                result = await analyzer.get_fundamentals(
+                    "AAPL", field_set="price_performance"
+                )
+
+                assert result["ticker"] == "AAPL"
+                assert "data" in result
+                assert "error" not in result
+
+                data = result["data"]
+                # Should include current price
+                assert "currentPrice" in data
+                assert data["currentPrice"] == 150.0  # From mock_yfinance_response
+
+                # Should include all percentage change fields
+                percentage_fields = [
+                    "annualChangePercent",
+                    "sixMonthChangePercent",
+                    "threeMonthChangePercent",
+                    "oneMonthChangePercent",
+                    "oneWeekChangePercent",
+                ]
+                assert all(field in data for field in percentage_fields)
+
+    @pytest.mark.asyncio
+    async def test_get_fundamentals_without_percentage_changes(
+        self, temp_cache_file, sample_tickers, mock_yfinance_response
+    ):
+        """Test that percentage changes are not calculated when not requested."""
+        with open(temp_cache_file, "w") as f:
+            json.dump(sample_tickers, f)
+
+        with patch("aiofiles.open", create=True) as mock_aiofiles:
+            mock_file = AsyncMock()
+            mock_file.read.return_value = json.dumps(sample_tickers)
+            mock_aiofiles.return_value.__aenter__.return_value = mock_file
+            mock_aiofiles.return_value.__aexit__.return_value = None
+
+            with patch("yfinance.Ticker") as mock_ticker:
+                mock_stock = Mock()
+                mock_stock.info = mock_yfinance_response
+                # We should NOT call history method when percentage changes aren't requested
+                mock_stock.history = Mock(side_effect=Exception("Should not be called"))
+                mock_ticker.return_value = mock_stock
+
+                analyzer = await FundamentalStockAnalyzer.create(
+                    cache_file=temp_cache_file
+                )
+
+                # Test with basic_info which doesn't include percentage changes
+                result = await analyzer.get_fundamentals("AAPL", field_set="basic_info")
+
+                assert result["ticker"] == "AAPL"
+                assert "data" in result
+                assert "error" not in result
+
+                # Should not contain percentage change fields
+                data = result["data"]
+                percentage_fields = [
+                    "annualChangePercent",
+                    "sixMonthChangePercent",
+                    "threeMonthChangePercent",
+                    "oneMonthChangePercent",
+                    "oneWeekChangePercent",
+                ]
+                assert not any(field in data for field in percentage_fields)
+
+    @pytest.mark.asyncio
+    async def test_get_multiple_fundamentals_with_percentage_changes(
+        self,
+        temp_cache_file,
+        sample_tickers,
+        mock_yfinance_response,
+        mock_historical_data,
+    ):
+        """Test get_multiple_fundamentals with percentage change fields."""
+        with open(temp_cache_file, "w") as f:
+            json.dump(sample_tickers, f)
+
+        with patch("aiofiles.open", create=True) as mock_aiofiles:
+            mock_file = AsyncMock()
+            mock_file.read.return_value = json.dumps(sample_tickers)
+            mock_aiofiles.return_value.__aenter__.return_value = mock_file
+            mock_aiofiles.return_value.__aexit__.return_value = None
+
+            with patch("yfinance.Ticker") as mock_ticker:
+                mock_stock = Mock()
+                mock_stock.info = mock_yfinance_response
+                mock_stock.history.return_value = mock_historical_data
+                mock_ticker.return_value = mock_stock
+
+                analyzer = await FundamentalStockAnalyzer.create(
+                    cache_file=temp_cache_file
+                )
+
+                results = await analyzer.get_multiple_fundamentals(
+                    tickers=["AAPL", "MSFT"],
+                    field_set="percentage_changes",
+                    max_concurrent=2,
+                )
+
+                assert len(results) == 2
+
+                for result in results:
+                    assert "ticker" in result
+                    assert "data" in result
+                    assert "error" not in result
+
+                    # Verify percentage change fields are present
+                    data = result["data"]
+                    expected_fields = [
+                        "annualChangePercent",
+                        "sixMonthChangePercent",
+                        "threeMonthChangePercent",
+                        "oneMonthChangePercent",
+                        "oneWeekChangePercent",
+                    ]
+                    assert all(field in data for field in expected_fields)
+
+    @pytest.mark.asyncio
+    async def test_percentage_changes_calculation_accuracy(
+        self, temp_cache_file, sample_tickers
+    ):
+        """Test that percentage change calculations are mathematically accurate."""
+        with open(temp_cache_file, "w") as f:
+            json.dump(sample_tickers, f)
+
+        # Create predictable test data
+        dates = pd.date_range(start="2023-01-01", end="2024-01-01", freq="W")
+        # Simple progression: 100 -> 110 (10% annual change)
+        prices = [100 + (i * 10 / len(dates)) for i in range(len(dates))]
+
+        test_hist_data = pd.DataFrame(
+            {
+                "Close": prices,
+                "Open": prices,
+                "High": prices,
+                "Low": prices,
+                "Volume": [1000000] * len(dates),
+            },
+            index=dates,
+        )
+
+        with patch("aiofiles.open", create=True) as mock_aiofiles:
+            mock_file = AsyncMock()
+            mock_file.read.return_value = json.dumps(sample_tickers)
+            mock_aiofiles.return_value.__aenter__.return_value = mock_file
+            mock_aiofiles.return_value.__aexit__.return_value = None
+
+            with patch("yfinance.Ticker") as mock_ticker:
+                mock_stock = Mock()
+                mock_stock.history.return_value = test_hist_data
+                mock_ticker.return_value = mock_stock
+
+                analyzer = await FundamentalStockAnalyzer.create(
+                    cache_file=temp_cache_file
+                )
+
+                changes = await analyzer._calculate_percentage_changes("TEST")
+
+                # With our test data, we should get approximately 10% annual change
+                annual_change = changes["annualChangePercent"]
+                assert annual_change is not None
+                assert 9.0 <= annual_change <= 11.0  # Allow some tolerance for rounding

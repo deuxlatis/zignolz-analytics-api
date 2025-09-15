@@ -46,6 +46,13 @@ fields:
     - earningsGrowth
     - revenueGrowth
 
+  percentage_changes:
+    - annualChangePercent
+    - sixMonthChangePercent
+    - threeMonthChangePercent
+    - oneMonthChangePercent
+    - oneWeekChangePercent
+
   financial_health:
     - quickRatio
     - debtToEquity
@@ -91,5 +98,13 @@ field_sets:
     - quickRatio
     - earningsGrowth
     - revenueGrowth
+
+  price_performance:
+    - currentPrice
+    - annualChangePercent
+    - sixMonthChangePercent
+    - threeMonthChangePercent
+    - oneMonthChangePercent
+    - oneWeekChangePercent
 
   complete: all  # Use all fields
