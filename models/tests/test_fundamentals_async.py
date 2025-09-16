@@ -350,10 +350,10 @@ class TestAsyncFundamentalStockAnalyzer:
                 assert result["error"] == "Network error"
 
     @pytest.mark.asyncio
-    async def test_get_multiple_fundamentals(
+    async def test_get_fundamentals_concurrent(
         self, temp_cache_file, sample_tickers, mock_yfinance_response
     ):
-        """Test the get_multiple_fundamentals method."""
+        """Test the get_fundamentals_concurrent method."""
         with open(temp_cache_file, "w") as f:
             json.dump(sample_tickers, f)
 
@@ -370,7 +370,7 @@ class TestAsyncFundamentalStockAnalyzer:
                 analyzer = await FundamentalStockAnalyzer.create(
                     cache_file=temp_cache_file
                 )
-                results = await analyzer.get_multiple_fundamentals(
+                results = await analyzer.get_fundamentals_concurrent(
                     tickers=["AAPL", "MSFT"], max_concurrent=2
                 )
 
@@ -381,7 +381,7 @@ class TestAsyncFundamentalStockAnalyzer:
                     assert "data" in result
 
     @pytest.mark.asyncio
-    async def test_get_multiple_fundamentals_with_concurrency_limit(
+    async def test_get_fundamentals_concurrent_with_concurrency_limit(
         self, temp_cache_file, sample_tickers, mock_yfinance_response
     ):
         """Test that concurrency limit is respected."""
@@ -402,10 +402,10 @@ class TestAsyncFundamentalStockAnalyzer:
                 )
 
                 # Test with different concurrency limits
-                results_1 = await analyzer.get_multiple_fundamentals(
+                results_1 = await analyzer.get_fundamentals_concurrent(
                     tickers=["AAPL", "MSFT"], max_concurrent=1
                 )
-                results_5 = await analyzer.get_multiple_fundamentals(
+                results_5 = await analyzer.get_fundamentals_concurrent(
                     tickers=["AAPL", "MSFT"], max_concurrent=5
                 )
 
@@ -419,7 +419,7 @@ class TestAsyncFundamentalStockAnalyzer:
     async def test_error_handling_in_multiple_fundamentals(
         self, temp_cache_file, sample_tickers
     ):
-        """Test error handling in get_multiple_fundamentals."""
+        """Test error handling in get_fundamentals_concurrent."""
         with open(temp_cache_file, "w") as f:
             json.dump(sample_tickers, f)
 
@@ -444,7 +444,7 @@ class TestAsyncFundamentalStockAnalyzer:
                 analyzer = await FundamentalStockAnalyzer.create(
                     cache_file=temp_cache_file
                 )
-                results = await analyzer.get_multiple_fundamentals(
+                results = await analyzer.get_fundamentals_concurrent(
                     tickers=["AAPL", "INVALID"], max_concurrent=2
                 )
 
@@ -825,14 +825,14 @@ class TestAsyncFundamentalStockAnalyzer:
                 assert not any(field in data for field in percentage_fields)
 
     @pytest.mark.asyncio
-    async def test_get_multiple_fundamentals_with_percentage_changes(
+    async def test_get_fundamentals_concurrent_with_percentage_changes(
         self,
         temp_cache_file,
         sample_tickers,
         mock_yfinance_response,
         mock_historical_data,
     ):
-        """Test get_multiple_fundamentals with percentage change fields."""
+        """Test get_fundamentals_concurrent with percentage change fields."""
         with open(temp_cache_file, "w") as f:
             json.dump(sample_tickers, f)
 
@@ -852,7 +852,7 @@ class TestAsyncFundamentalStockAnalyzer:
                     cache_file=temp_cache_file
                 )
 
-                results = await analyzer.get_multiple_fundamentals(
+                results = await analyzer.get_fundamentals_concurrent(
                     tickers=["AAPL", "MSFT"],
                     field_set="percentage_changes",
                     max_concurrent=2,

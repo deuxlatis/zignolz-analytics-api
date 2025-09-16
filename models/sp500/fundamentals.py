@@ -303,7 +303,7 @@ class FundamentalStockAnalyzer:
                 "error": str(e),
             }
 
-    async def get_multiple_fundamentals(
+    async def get_fundamentals_concurrent(
         self,
         tickers: Optional[List[str]] = None,
         field_set: Optional[str] = None,
@@ -367,3 +367,27 @@ class FundamentalStockAnalyzer:
 
         logger.info(f"Completed processing {len(processed_results)} tickers")
         return processed_results
+
+    async def filter_by_criteria(
+        self,
+        criteria: Dict[str, Any],
+        fundamentals: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Filter stocks based on specified criteria and logic.
+
+        Parameters
+        ----------
+        criteria : Dict[str, Any]
+            Dictionary of criteria to filter stocks. Keys are field names, values are the desired values.
+        fundamentals : List[Dict[str, Any]]
+            List of fundamental data dictionaries for S&P 500 stocks (from get_fundamentals_concurrent).
+
+        Returns
+        -------
+        List[Dict[str, Any]]
+            List of dictionaries containing fundamental data for stocks that meet the criteria.
+        """
+        # Example: Filter stocks with annualChangePercent <= 25%
+        # Implement your filtering logic here using the 'fundamentals' parameter
+        # For now, return empty list as placeholder
+        return []

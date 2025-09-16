@@ -67,7 +67,7 @@ async def benchmark_async_performance():
         start_time = time.time()
 
         try:
-            data = await analyzer.get_multiple_fundamentals(
+            data = await analyzer.get_fundamentals_concurrent(
                 tickers=test_tickers, max_concurrent=max_concurrent
             )
 
