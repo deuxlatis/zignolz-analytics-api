@@ -350,10 +350,10 @@ class TestAsyncFundamentalStockAnalyzer:
                 assert result["error"] == "Network error"
 
     @pytest.mark.asyncio
-    async def test_get_multiple_fundamentals(
+    async def test_get_fundamentals_concurrent(
         self, temp_cache_file, sample_tickers, mock_yfinance_response
     ):
-        """Test the get_multiple_fundamentals method."""
+        """Test the get_fundamentals_concurrent method."""
         with open(temp_cache_file, "w") as f:
             json.dump(sample_tickers, f)
 
@@ -370,7 +370,7 @@ class TestAsyncFundamentalStockAnalyzer:
                 analyzer = await FundamentalStockAnalyzer.create(
                     cache_file=temp_cache_file
                 )
-                results = await analyzer.get_multiple_fundamentals(
+                results = await analyzer.get_fundamentals_concurrent(
                     tickers=["AAPL", "MSFT"], max_concurrent=2
                 )
 
@@ -381,7 +381,7 @@ class TestAsyncFundamentalStockAnalyzer:
                     assert "data" in result
 
     @pytest.mark.asyncio
-    async def test_get_multiple_fundamentals_with_concurrency_limit(
+    async def test_get_fundamentals_concurrent_with_concurrency_limit(
         self, temp_cache_file, sample_tickers, mock_yfinance_response
     ):
         """Test that concurrency limit is respected."""
@@ -402,10 +402,10 @@ class TestAsyncFundamentalStockAnalyzer:
                 )
 
                 # Test with different concurrency limits
-                results_1 = await analyzer.get_multiple_fundamentals(
+                results_1 = await analyzer.get_fundamentals_concurrent(
                     tickers=["AAPL", "MSFT"], max_concurrent=1
                 )
-                results_5 = await analyzer.get_multiple_fundamentals(
+                results_5 = await analyzer.get_fundamentals_concurrent(
                     tickers=["AAPL", "MSFT"], max_concurrent=5
                 )
 
@@ -419,7 +419,7 @@ class TestAsyncFundamentalStockAnalyzer:
     async def test_error_handling_in_multiple_fundamentals(
         self, temp_cache_file, sample_tickers
     ):
-        """Test error handling in get_multiple_fundamentals."""
+        """Test error handling in get_fundamentals_concurrent."""
         with open(temp_cache_file, "w") as f:
             json.dump(sample_tickers, f)
 
@@ -444,7 +444,7 @@ class TestAsyncFundamentalStockAnalyzer:
                 analyzer = await FundamentalStockAnalyzer.create(
                     cache_file=temp_cache_file
                 )
-                results = await analyzer.get_multiple_fundamentals(
+                results = await analyzer.get_fundamentals_concurrent(
                     tickers=["AAPL", "INVALID"], max_concurrent=2
                 )
 
@@ -825,14 +825,14 @@ class TestAsyncFundamentalStockAnalyzer:
                 assert not any(field in data for field in percentage_fields)
 
     @pytest.mark.asyncio
-    async def test_get_multiple_fundamentals_with_percentage_changes(
+    async def test_get_fundamentals_concurrent_with_percentage_changes(
         self,
         temp_cache_file,
         sample_tickers,
         mock_yfinance_response,
         mock_historical_data,
     ):
-        """Test get_multiple_fundamentals with percentage change fields."""
+        """Test get_fundamentals_concurrent with percentage change fields."""
         with open(temp_cache_file, "w") as f:
             json.dump(sample_tickers, f)
 
@@ -852,7 +852,7 @@ class TestAsyncFundamentalStockAnalyzer:
                     cache_file=temp_cache_file
                 )
 
-                results = await analyzer.get_multiple_fundamentals(
+                results = await analyzer.get_fundamentals_concurrent(
                     tickers=["AAPL", "MSFT"],
                     field_set="percentage_changes",
                     max_concurrent=2,
@@ -921,3 +921,431 @@ class TestAsyncFundamentalStockAnalyzer:
                 annual_change = changes["annualChangePercent"]
                 assert annual_change is not None
                 assert 9.0 <= annual_change <= 11.0  # Allow some tolerance for rounding
+
+    @pytest.fixture
+    def sample_fundamentals_data(self):
+        """Create sample fundamentals data for testing."""
+        return [
+            {
+                "ticker": "GOOD1",
+                "data": {
+                    "annualChangePercent": -30.0,
+                    "sixMonthChangePercent": -5.0,
+                    "threeMonthChangePercent": -2.0,
+                    "oneMonthChangePercent": -1.0,
+                    "oneWeekChangePercent": 0.5,  # Only one positive
+                    "operatingCashflow": 500000000,
+                    "freeCashflow": 400000000,
+                    "ebitda": 1000000000,
+                    "profitMargins": 0.15,
+                    "revenueGrowth": -5.0,
+                    "ebitdaMargins": 0.20,
+                    "operatingMargins": 0.18,
+                    "returnOnAssets": 0.08,
+                    "returnOnEquity": 0.12,
+                    "shortName": "Good Company 1",
+                },
+            },
+            {
+                "ticker": "GOOD2",
+                "data": {
+                    "annualChangePercent": -35.0,
+                    "sixMonthChangePercent": -10.0,
+                    "threeMonthChangePercent": -8.0,
+                    "oneMonthChangePercent": -5.0,
+                    "oneWeekChangePercent": -2.0,  # All negative
+                    "operatingCashflow": 600000000,
+                    "freeCashflow": 500000000,
+                    "ebitda": 1200000000,
+                    "profitMargins": 0.18,
+                    "revenueGrowth": -3.0,
+                    "ebitdaMargins": 0.22,
+                    "operatingMargins": 0.20,
+                    "returnOnAssets": 0.10,
+                    "returnOnEquity": 0.15,
+                    "shortName": "Good Company 2",
+                },
+            },
+            {
+                "ticker": "BAD1",
+                "data": {
+                    "annualChangePercent": -15.0,  # Not enough decline
+                    "sixMonthChangePercent": -5.0,
+                    "threeMonthChangePercent": -2.0,
+                    "oneMonthChangePercent": -1.0,
+                    "oneWeekChangePercent": -0.5,
+                    "operatingCashflow": 500000000,
+                    "freeCashflow": 400000000,
+                    "ebitda": 1000000000,
+                    "profitMargins": 0.15,
+                    "revenueGrowth": -5.0,
+                    "ebitdaMargins": 0.20,
+                    "operatingMargins": 0.18,
+                    "returnOnAssets": 0.08,
+                    "returnOnEquity": 0.12,
+                    "shortName": "Bad Company 1",
+                },
+            },
+            {
+                "ticker": "BAD2",
+                "data": {
+                    "annualChangePercent": -30.0,
+                    "sixMonthChangePercent": 5.0,  # Too many positive periods
+                    "threeMonthChangePercent": 2.0,
+                    "oneMonthChangePercent": -1.0,
+                    "oneWeekChangePercent": -0.5,
+                    "operatingCashflow": 500000000,
+                    "freeCashflow": 400000000,
+                    "ebitda": 1000000000,
+                    "profitMargins": 0.15,
+                    "revenueGrowth": -5.0,
+                    "ebitdaMargins": 0.20,
+                    "operatingMargins": 0.18,
+                    "returnOnAssets": 0.08,
+                    "returnOnEquity": 0.12,
+                    "shortName": "Bad Company 2",
+                },
+            },
+            {
+                "ticker": "ERROR1",
+                "error": "Network error",
+            },
+        ]
+
+    @pytest.mark.asyncio
+    async def test_recommended_stocks_with_mock_data(
+        self, temp_cache_file, sample_tickers, sample_fundamentals_data
+    ):
+        """Test recommended_stocks method with mocked fundamental data."""
+        with open(temp_cache_file, "w") as f:
+            json.dump(sample_tickers, f)
+
+        with patch("aiofiles.open", create=True) as mock_aiofiles:
+            mock_file = AsyncMock()
+            mock_file.read.return_value = json.dumps(sample_tickers)
+            mock_aiofiles.return_value.__aenter__.return_value = mock_file
+            mock_aiofiles.return_value.__aexit__.return_value = None
+
+            analyzer = await FundamentalStockAnalyzer.create(cache_file=temp_cache_file)
+
+            # Mock the get_fundamentals_concurrent method
+            with patch.object(
+                analyzer,
+                "get_fundamentals_concurrent",
+                return_value=sample_fundamentals_data,
+            ):
+                recommendations = await analyzer.recommended_stocks(
+                    tickers=["GOOD1", "GOOD2", "BAD1", "BAD2", "ERROR1"]
+                )
+
+                # Should return GOOD1 (signs of recovery) and GOOD2 (full decline)
+                assert len(recommendations) == 2
+                assert "GOOD1" in recommendations
+                assert "GOOD2" in recommendations
+                assert "BAD1" not in recommendations  # Doesn't meet annual decline
+                assert "BAD2" not in recommendations  # Too many positive periods
+                assert "ERROR1" not in recommendations  # Has error
+
+    @pytest.mark.asyncio
+    async def test_recommended_stocks_empty_results(
+        self, temp_cache_file, sample_tickers
+    ):
+        """Test recommended_stocks when no stocks meet criteria."""
+        with open(temp_cache_file, "w") as f:
+            json.dump(sample_tickers, f)
+
+        with patch("aiofiles.open", create=True) as mock_aiofiles:
+            mock_file = AsyncMock()
+            mock_file.read.return_value = json.dumps(sample_tickers)
+            mock_aiofiles.return_value.__aenter__.return_value = mock_file
+            mock_aiofiles.return_value.__aexit__.return_value = None
+
+            analyzer = await FundamentalStockAnalyzer.create(cache_file=temp_cache_file)
+
+            # Mock with data that doesn't meet criteria
+            bad_fundamentals = [
+                {
+                    "ticker": "STABLE",
+                    "data": {
+                        "annualChangePercent": 10.0,  # Positive change
+                        "operatingCashflow": 500000000,
+                        "freeCashflow": 400000000,
+                    },
+                }
+            ]
+
+            with patch.object(
+                analyzer, "get_fundamentals_concurrent", return_value=bad_fundamentals
+            ):
+                recommendations = await analyzer.recommended_stocks(tickers=["STABLE"])
+
+                assert recommendations == []
+
+    @pytest.mark.asyncio
+    async def test_recommended_stocks_with_none_tickers(
+        self, temp_cache_file, sample_tickers
+    ):
+        """Test recommended_stocks when tickers parameter is None."""
+        with open(temp_cache_file, "w") as f:
+            json.dump(sample_tickers, f)
+
+        with patch("aiofiles.open", create=True) as mock_aiofiles:
+            mock_file = AsyncMock()
+            mock_file.read.return_value = json.dumps(sample_tickers)
+            mock_aiofiles.return_value.__aenter__.return_value = mock_file
+            mock_aiofiles.return_value.__aexit__.return_value = None
+
+            analyzer = await FundamentalStockAnalyzer.create(cache_file=temp_cache_file)
+
+            # Mock empty fundamentals for all tickers
+            with patch.object(analyzer, "get_fundamentals_concurrent", return_value=[]):
+                recommendations = await analyzer.recommended_stocks(tickers=None)
+
+                assert isinstance(recommendations, list)
+                assert recommendations == []
+
+    @pytest.mark.asyncio
+    async def test_score_recommended_stocks_with_mock_data(
+        self, temp_cache_file, sample_tickers, sample_fundamentals_data
+    ):
+        """Test score_recommended_stocks method with mocked data."""
+        with open(temp_cache_file, "w") as f:
+            json.dump(sample_tickers, f)
+
+        with patch("aiofiles.open", create=True) as mock_aiofiles:
+            mock_file = AsyncMock()
+            mock_file.read.return_value = json.dumps(sample_tickers)
+            mock_aiofiles.return_value.__aenter__.return_value = mock_file
+            mock_aiofiles.return_value.__aexit__.return_value = None
+
+            analyzer = await FundamentalStockAnalyzer.create(cache_file=temp_cache_file)
+
+            # Mock recommended_stocks to return our test tickers
+            with patch.object(
+                analyzer, "recommended_stocks", return_value=["GOOD1", "GOOD2"]
+            ):
+                # Mock get_fundamentals_concurrent for scoring
+                scoring_data = [
+                    stock
+                    for stock in sample_fundamentals_data
+                    if stock["ticker"] in ["GOOD1", "GOOD2"]
+                ]
+
+                with patch.object(
+                    analyzer, "get_fundamentals_concurrent", return_value=scoring_data
+                ):
+                    scores = await analyzer.score_recommended_stocks()
+
+                    # Verify basic structure
+                    assert isinstance(scores, list)
+                    assert len(scores) == 2
+
+                    # Verify each scored stock has required fields
+                    for stock in scores:
+                        assert "ticker" in stock
+                        assert "total_score" in stock
+                        assert isinstance(stock["total_score"], int)
+                        assert stock["ticker"] in ["GOOD1", "GOOD2"]
+
+                    # Verify sorting (higher scores should be first)
+                    if len(scores) > 1:
+                        assert scores[0]["total_score"] >= scores[1]["total_score"]
+
+                    # Verify individual score fields exist
+                    score_fields = [
+                        "operatingCashflow_score",
+                        "freeCashflow_score",
+                        "ebitda_score",
+                        "profitMargins_score",
+                        "revenueGrowth_score",
+                        "ebitdaMargins_score",
+                        "operatingMargins_score",
+                        "returnOnAssets_score",
+                        "returnOnEquity_score",
+                    ]
+
+                    for score_field in score_fields:
+                        # At least one stock should have this score field
+                        assert any(score_field in stock for stock in scores)
+
+    @pytest.mark.asyncio
+    async def test_score_recommended_stocks_with_provided_tickers(
+        self, temp_cache_file, sample_tickers, sample_fundamentals_data
+    ):
+        """Test score_recommended_stocks with explicitly provided tickers."""
+        with open(temp_cache_file, "w") as f:
+            json.dump(sample_tickers, f)
+
+        with patch("aiofiles.open", create=True) as mock_aiofiles:
+            mock_file = AsyncMock()
+            mock_file.read.return_value = json.dumps(sample_tickers)
+            mock_aiofiles.return_value.__aenter__.return_value = mock_file
+            mock_aiofiles.return_value.__aexit__.return_value = None
+
+            analyzer = await FundamentalStockAnalyzer.create(cache_file=temp_cache_file)
+
+            # Provide specific tickers
+            test_tickers = ["GOOD1", "GOOD2"]
+            scoring_data = [
+                stock
+                for stock in sample_fundamentals_data
+                if stock["ticker"] in test_tickers
+            ]
+
+            with patch.object(
+                analyzer, "get_fundamentals_concurrent", return_value=scoring_data
+            ):
+                scores = await analyzer.score_recommended_stocks(tickers=test_tickers)
+
+                assert len(scores) == 2
+                assert all(stock["ticker"] in test_tickers for stock in scores)
+
+    @pytest.mark.asyncio
+    async def test_score_recommended_stocks_empty_recommendations(
+        self, temp_cache_file, sample_tickers
+    ):
+        """Test score_recommended_stocks when no stocks are recommended."""
+        with open(temp_cache_file, "w") as f:
+            json.dump(sample_tickers, f)
+
+        with patch("aiofiles.open", create=True) as mock_aiofiles:
+            mock_file = AsyncMock()
+            mock_file.read.return_value = json.dumps(sample_tickers)
+            mock_aiofiles.return_value.__aenter__.return_value = mock_file
+            mock_aiofiles.return_value.__aexit__.return_value = None
+
+            analyzer = await FundamentalStockAnalyzer.create(cache_file=temp_cache_file)
+
+            # Mock recommended_stocks to return empty list
+            with patch.object(analyzer, "recommended_stocks", return_value=[]):
+                scores = await analyzer.score_recommended_stocks()
+
+                assert scores == []
+
+    @pytest.mark.asyncio
+    async def test_score_recommended_stocks_error_handling(
+        self, temp_cache_file, sample_tickers
+    ):
+        """Test score_recommended_stocks handles errors gracefully."""
+        with open(temp_cache_file, "w") as f:
+            json.dump(sample_tickers, f)
+
+        with patch("aiofiles.open", create=True) as mock_aiofiles:
+            mock_file = AsyncMock()
+            mock_file.read.return_value = json.dumps(sample_tickers)
+            mock_aiofiles.return_value.__aenter__.return_value = mock_file
+            mock_aiofiles.return_value.__aexit__.return_value = None
+
+            analyzer = await FundamentalStockAnalyzer.create(cache_file=temp_cache_file)
+
+            # Mock fundamentals with errors
+            error_data = [
+                {"ticker": "ERROR1", "error": "Network error"},
+                {"ticker": "ERROR2", "error": "Invalid ticker"},
+            ]
+
+            with patch.object(
+                analyzer, "recommended_stocks", return_value=["ERROR1", "ERROR2"]
+            ):
+                with patch.object(
+                    analyzer, "get_fundamentals_concurrent", return_value=error_data
+                ):
+                    scores = await analyzer.score_recommended_stocks()
+
+                    # Should return empty list when all stocks have errors
+                    assert scores == []
+
+    @pytest.mark.asyncio
+    async def test_score_recommended_stocks_partial_data(
+        self, temp_cache_file, sample_tickers
+    ):
+        """Test score_recommended_stocks with partial/missing data."""
+        with open(temp_cache_file, "w") as f:
+            json.dump(sample_tickers, f)
+
+        with patch("aiofiles.open", create=True) as mock_aiofiles:
+            mock_file = AsyncMock()
+            mock_file.read.return_value = json.dumps(sample_tickers)
+            mock_aiofiles.return_value.__aenter__.return_value = mock_file
+            mock_aiofiles.return_value.__aexit__.return_value = None
+
+            analyzer = await FundamentalStockAnalyzer.create(cache_file=temp_cache_file)
+
+            # Data with some missing fields
+            partial_data = [
+                {
+                    "ticker": "PARTIAL1",
+                    "data": {
+                        "shortName": "Partial Company 1",
+                        "operatingCashflow": 500000000,
+                        "freeCashflow": 400000000,
+                        "ebitda": 1000000000,
+                        # Missing some scoring fields
+                    },
+                },
+                {
+                    "ticker": "PARTIAL2",
+                    "data": {
+                        "shortName": "Partial Company 2",
+                        "operatingCashflow": 600000000,
+                        "freeCashflow": 500000000,
+                        "profitMargins": 0.15,
+                        "returnOnAssets": 0.08,
+                        # Missing some scoring fields
+                    },
+                },
+            ]
+
+            with patch.object(
+                analyzer, "recommended_stocks", return_value=["PARTIAL1", "PARTIAL2"]
+            ):
+                with patch.object(
+                    analyzer, "get_fundamentals_concurrent", return_value=partial_data
+                ):
+                    scores = await analyzer.score_recommended_stocks()
+
+                    # Should still work with partial data
+                    assert isinstance(scores, list)
+                    assert len(scores) == 2
+
+                    # Should have basic required fields
+                    for stock in scores:
+                        assert "ticker" in stock
+                        assert "total_score" in stock
+
+    def test_score_ranking_logic(self):
+        """Test the ranking logic used in scoring."""
+        import pandas as pd
+
+        # Create test data similar to what would be used in scoring
+        test_data = pd.DataFrame(
+            {
+                "operatingCashflow": [1000000000, 500000000, 750000000],
+                "profitMargins": [0.20, 0.10, 0.15],
+                "returnOnAssets": [0.12, 0.05, 0.08],
+            },
+            index=["STOCK1", "STOCK2", "STOCK3"],
+        )
+
+        # Test ranking logic (ascending=False means higher values get lower ranks)
+        for column in ["operatingCashflow", "profitMargins", "returnOnAssets"]:
+            test_data[f"{column}_score"] = (
+                test_data[column].rank(ascending=False, method="max").astype(int)
+            )
+
+        # Verify ranking is correct (higher values should get rank 1)
+        assert test_data.loc["STOCK1", "operatingCashflow_score"] == 1  # Highest value
+        assert test_data.loc["STOCK2", "operatingCashflow_score"] == 3  # Lowest value
+        assert test_data.loc["STOCK3", "operatingCashflow_score"] == 2  # Middle value
+
+        # Test total score calculation
+        score_columns = [col for col in test_data.columns if col.endswith("_score")]
+        test_data["total_score"] = test_data[score_columns].sum(axis=1)
+
+        # STOCK1 should have the lowest total score (best overall)
+        stock1_score = int(test_data.loc["STOCK1", "total_score"])  # type: ignore
+        stock2_score = int(test_data.loc["STOCK2", "total_score"])  # type: ignore
+        stock3_score = int(test_data.loc["STOCK3", "total_score"])  # type: ignore
+
+        assert stock1_score < stock2_score
+        assert stock1_score < stock3_score

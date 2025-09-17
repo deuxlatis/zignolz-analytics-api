@@ -32,7 +32,7 @@ async def main():
     start_time = time.time()
 
     # Get fundamentals for multiple tickers concurrently
-    results = await analyzer.get_multiple_fundamentals(
+    results = await analyzer.get_fundamentals_concurrent(
         tickers=test_tickers,
         max_concurrent=3,  # Limit concurrent requests
     )
@@ -62,14 +62,14 @@ async def benchmark_comparison():
     # Test concurrent version
     print("Running concurrent version...")
     start_time = time.time()
-    await analyzer.get_multiple_fundamentals(tickers=test_tickers, max_concurrent=5)
+    await analyzer.get_fundamentals_concurrent(tickers=test_tickers, max_concurrent=5)
     concurrent_time = time.time() - start_time
     print(f"Concurrent version: {concurrent_time:.2f} seconds")
 
     # Simulate sequential version by setting max_concurrent=1
     print("Running sequential version...")
     start_time = time.time()
-    await analyzer.get_multiple_fundamentals(tickers=test_tickers, max_concurrent=1)
+    await analyzer.get_fundamentals_concurrent(tickers=test_tickers, max_concurrent=1)
     sequential_time = time.time() - start_time
     print(f"Sequential version: {sequential_time:.2f} seconds")
 
