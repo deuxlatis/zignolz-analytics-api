@@ -1147,9 +1147,9 @@ class TestAsyncFundamentalStockAnalyzer:
                         assert isinstance(stock["total_score"], int)
                         assert stock["ticker"] in ["GOOD1", "GOOD2"]
 
-                    # Verify sorting (lower scores should be first)
+                    # Verify sorting (higher scores should be first)
                     if len(scores) > 1:
-                        assert scores[0]["total_score"] <= scores[1]["total_score"]
+                        assert scores[0]["total_score"] >= scores[1]["total_score"]
 
                     # Verify individual score fields exist
                     score_fields = [

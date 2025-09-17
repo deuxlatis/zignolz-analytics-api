@@ -523,7 +523,7 @@ class FundamentalStockAnalyzer:
             List of dictionaries sorted by total score (best to worst), each containing:
             - ticker: Stock ticker symbol
             - shortName: Company name
-            - total_score: Aggregate ranking score (lower is better)
+            - total_score: Aggregate ranking score (higher is better)
             - individual scores for each scoring metric
             - performance metrics (price changes)
             - financial metrics used in scoring
@@ -719,7 +719,7 @@ class FundamentalStockAnalyzer:
             List of dictionaries (max 10) sorted by total score (best to worst), each containing:
             - ticker: Stock ticker symbol
             - shortName: Company name
-            - total_score: Aggregate ranking score (lower is better)
+            - total_score: Aggregate ranking score (higher is better)
             - individual scores for each scoring metric
             - performance metrics (price changes)
             - financial metrics used in scoring
