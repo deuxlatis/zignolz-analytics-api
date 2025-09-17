@@ -307,7 +307,7 @@ class FundamentalStockAnalyzer:
         self,
         tickers: Optional[List[str]] = None,
         field_set: Optional[str] = None,
-        max_concurrent: int = 10,
+        max_concurrent: int = 5,
     ) -> list[dict[str, Any]]:
         """Get fundamental data for multiple tickers concurrently.
 
@@ -317,7 +317,7 @@ class FundamentalStockAnalyzer:
             List of ticker symbols. If not provided, uses all S&P 500 tickers.
         field_set : str, optional
             Field set to use for data retrieval. If not provided, uses instance field_set.
-        max_concurrent : int, default 10
+        max_concurrent : int, default 5
             Maximum number of concurrent requests to limit API rate.
 
         Returns
@@ -371,7 +371,7 @@ class FundamentalStockAnalyzer:
     async def recommended_stocks(
         self,
         tickers: Optional[List[str]] = None,
-        max_concurrent: int = 10,
+        max_concurrent: int = 5,
     ) -> List[str]:
         """Get recommended stock tickers based on specific criteria.
 
@@ -502,7 +502,7 @@ class FundamentalStockAnalyzer:
     async def score_recommended_stocks(
         self,
         tickers: Optional[List[str]] = None,
-        max_concurrent: int = 10,
+        max_concurrent: int = 5,
     ) -> List[Dict[str, Any]]:
         """Score recommended stocks using a ranking-based approach across multiple financial metrics.
 
@@ -514,7 +514,7 @@ class FundamentalStockAnalyzer:
         tickers : List[str], optional
             List of ticker symbols to analyze. If not provided, gets recommendations
             from recommended_stocks() method.
-        max_concurrent : int, default 10
+        max_concurrent : int, default 5
             Maximum number of concurrent requests to limit API rate.
 
         Returns
@@ -620,7 +620,7 @@ class FundamentalStockAnalyzer:
 
             df.loc[:, f"{column}_score"] = (
                 df[column]
-                .rank(ascending=False, method="min", na_option="bottom")
+                .rank(ascending=True, method="max", na_option="bottom")
                 .astype(int)
             )
 
@@ -637,8 +637,8 @@ class FundamentalStockAnalyzer:
             logger.error("No score columns were created")
             return []
 
-        # Sort by total score (lower total score = better overall performance)
-        df = df.sort_values("total_score", ascending=True)
+        # Sort by total score (high total score = better overall performance)
+        df = df.sort_values("total_score", ascending=False)
 
         # Convert to list of dictionaries for return
         results = []
@@ -696,7 +696,7 @@ class FundamentalStockAnalyzer:
     async def get_recommended_stocks(
         self,
         tickers: Optional[List[str]] = None,
-        max_concurrent: int = 10,
+        max_concurrent: int = 5,
     ) -> List[Dict[str, Any]]:
         """Get recommended stocks along with their detailed scores and metrics.
 
@@ -710,7 +710,7 @@ class FundamentalStockAnalyzer:
         tickers : List[str], optional
             List of ticker symbols to analyze. If not provided, gets recommendations
             from recommended_stocks() method.
-        max_concurrent : int, default 10
+        max_concurrent : int, default 5
             Maximum number of concurrent requests to limit API rate.
 
         Returns
@@ -765,5 +765,7 @@ class FundamentalStockAnalyzer:
                 )
 
         # Sort the scored stocks by total_score (lower is better)
-        scored_stocks.sort(key=lambda x: x.get("total_score", float("inf")))
+        scored_stocks = sorted(
+            scored_stocks, key=lambda x: x.get("total_score", 0), reverse=True
+        )
         return scored_stocks
