@@ -581,6 +581,13 @@ class FundamentalStockAnalyzer:
             "returnOnAssets",
             "returnOnEquity",
             "enterpriseValue",
+            "currentPrice",
+            "marketCap",
+            "targetMeanPrice",
+            "targetLowPrice",
+            "targetHighPrice",
+            "sector",
+            "industry",
         ]
 
         # Filter DataFrame to include only required columns that exist
